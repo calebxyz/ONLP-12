@@ -78,8 +78,6 @@ class Submission(SubmissionSpec12):
                 word = p[self.__WORD_IDX]
                 XTag = self._create_xtag(word, tag)
                 if not XTag in self._emission_probs:
-                    if not tag in self._tag_count:
-                        self._tag_count[tag] = self._count_tag(tag, annotated_sentences)
                     self._emission_probs[XTag] = bigrams_counts[XTag] / self._tag_count[tag]
 
     def train(self, annotated_sentences):
