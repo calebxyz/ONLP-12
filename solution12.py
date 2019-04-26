@@ -21,70 +21,73 @@ class Submission(SubmissionSpec12):
         self._tag_set = 'ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split()
         self._tag_count = dict()
 
-    def _count_tag(self, tag, annotated_sentences):
-        count = 0
-        for sent in annotated_sentences:
-            for p in sent:
-                if p[self.__TAG_IDX] == tag:
-                    count = count + 1
-        return count
+    def _create_xtag(self, x1, x2):
+        return "{}|{}".format(x1, x2)
 
-    def _count_bigrams(self, tag1, tag2, annotated_sentences):
-        count = 0
+    def _count_tag_bigrams(self, annotated_sentences):
+        counts = dict()
         for sent in annotated_sentences:
             sent_len = len(sent)
             for idx in range(sent_len - 1):
-                tag1_ = sent[idx][self.__TAG_IDX]
-                tag2_ = sent[idx + 1][self.__TAG_IDX]
-                if tag1 == tag1_ and tag2 == tag2_:
-                    count = count + 1
-        return count
+                XTag = self._create_xtag(sent[idx][self.__TAG_IDX], sent[idx + 1][self.__TAG_IDX])
+                if not XTag in counts:
+                    counts[XTag] = 1
+                else:
+                    counts[XTag] = counts[XTag] + 1
+        return counts
+
+    def _count_tags(self, annotated_sentences):
+        self._tag_count = dict()
+        for sent in annotated_sentences:
+            for p in sent:
+                tag = p[self.__TAG_IDX]
+                if not tag in self._tag_count:
+                    self._tag_count[tag] = 1
+                else:
+                    self._tag_count[tag] = self._tag_count[tag] + 1
 
     def _estimate_transition_probabilites(self, annotated_sentences):
-        bigrams_counts = dict()
+        bigrams_counts = self._count_tag_bigrams(annotated_sentences)
         self._transition_probs = dict()
         for sent in annotated_sentences:
             sent_len = len(sent)
             for idx in range(sent_len-1):
                 tag1 = sent[idx][self.__TAG_IDX]
                 tag2 = sent[idx+1][self.__TAG_IDX]
-                Xtag = tag1 + "|" + tag2
+                Xtag = self._create_xtag(tag1, tag2)
                 if not Xtag in self._transition_probs:
-                    if not tag1 in self._tag_count:
-                        self._tag_count[tag1] = self._count_tag(tag1, annotated_sentences)
-                    if not Xtag in bigrams_counts:
-                        bigrams_counts[Xtag] = self._count_bigrams(tag1, tag2, annotated_sentences)
                     self._transition_probs[Xtag] = bigrams_counts[Xtag] / self._tag_count[tag1]
 
-    def _count_tag_to_word(self, tag, word, annotated_sentences):
-        count = 0
+    def _count_tag_to_word_pairs(self, annotated_sentences):
+        counts = dict()
         for sent in annotated_sentences:
             for p in sent:
-                if p[self.__WORD_IDX] == word and p[self.__TAG_IDX] == tag:
-                    count = count + 1
-        return count
+                xtag = self._create_xtag(p[self.__WORD_IDX], p[self.__TAG_IDX])
+                if not xtag in counts:
+                    counts[xtag] = 1
+                else:
+                    counts[xtag] = counts[xtag] + 1
+        return counts
 
     def _estimate_emission_probabilites(self, annotated_sentences):
-        bigrams_counts = dict()
+        bigrams_counts = self._count_tag_to_word_pairs(annotated_sentences)
         self._emission_probs = dict()
         for sent in annotated_sentences:
             for p in sent:
                 tag = p[self.__TAG_IDX]
                 word = p[self.__WORD_IDX]
-                XTag = word + "|" + tag
+                XTag = self._create_xtag(word, tag)
                 if not XTag in self._emission_probs:
                     if not tag in self._tag_count:
                         self._tag_count[tag] = self._count_tag(tag, annotated_sentences)
-                    if not XTag in bigrams_counts:
-                        bigrams_counts[XTag] = self._count_tag_to_word(tag, word, annotated_sentences)
                     self._emission_probs[XTag] = bigrams_counts[XTag] / self._tag_count[tag]
 
-
-    def train(self, annotated_sentences):    
+    def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
 
         print('training function received {} annotated sentences as training data'.format(len(annotated_sentences)))
-        
+
+        self._count_tags(annotated_sentences)
         self._estimate_emission_probabilites(annotated_sentences)
         self._estimate_transition_probabilites(annotated_sentences)
         
