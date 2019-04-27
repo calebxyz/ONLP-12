@@ -116,8 +116,6 @@ class Submission(SubmissionSpec12):
 
         return self
 
-
-
     def _viterbi(self, sentence):
         if sentence is None:
             return
@@ -129,16 +127,32 @@ class Submission(SubmissionSpec12):
         #init the lettece matrix
         for s in range(N):
             if sentence[0] in self._emission_probs:
-                viterbi_mat[s, 1] = self._emission_probs[sentence[0]][s]
+                viterbi_mat[s, 0] = self._emission_probs[sentence[0]][s]
 
-        #for t in range(1, T):
-        #    for s in range(N):
+        def getMaxByFunc(func, o_t, s, t):
+            if o_t in self._emission_probs:
+                b_ot = self._emission_probs[o_t][s]
+            else:
+                return 0
 
+            vitmax = np.multiply(viterbi_mat[:, t - 1], self._transition_probs[:, s]) * b_ot
+            return func(vitmax)
 
+        for t in range(1, T):
+            for s in range(N):
+                o_t = sentence[t]
+                viterbi_mat[s, t] = getMaxByFunc(np.max, o_t, s, t)
+                backpointer[s, t] = getMaxByFunc(np.argmax, o_t, s, t)
 
+        best_path_probe = np.max(viterbi_mat[:, T-1])
+        best_back_pointer = np.argmax(viterbi_mat[:, T-1])
 
+        best_path = [self._tag_set[int(best_back_pointer)]]
+        for t in range(1, T):
+            next = int(np.max(backpointer[:, t]))
+            best_path.append(self._tag_set[next])
 
-        return
+        return best_path, best_path_probe
 
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
@@ -153,8 +167,8 @@ class Submission(SubmissionSpec12):
         return self 
 
     def predict(self, sentence):
-        self._viterbi(sentence)
-        prediction = [random.choice(self._tag_set) for segment in sentence]
+        prediction, _ = self._viterbi(sentence)
+        #prediction = [random.choice(self._tag_set) for segment in sentence]
         assert (len(prediction) == len(sentence))
         return prediction
             
