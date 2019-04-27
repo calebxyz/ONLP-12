@@ -16,13 +16,18 @@ class Submission(SubmissionSpec12):
     ''' a contrived poorely performing solution for question one of this Maman '''
     __TAG_IDX  = 1
     __WORD_IDX = 0
+    __SEPERATOR = "#=<*|*>=#"
+    __XTAG_PLACE_HOLD = "{}" + __SEPERATOR + "{}"
 
     def __init__(self):
         self._tag_set = 'ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split()
         self._tag_count = dict()
+        self._tag_to_num = dict()
+        for idx, tag in enumerate(self._tag_set):
+            self._tag_to_num[tag] = idx
 
     def _create_xtag(self, x1, x2):
-        return "{}|{}".format(x1, x2)
+        return self.__XTAG_PLACE_HOLD.format(x1, x2)
 
     def _count_tag_bigrams(self, annotated_sentences):
         counts = dict()
@@ -80,6 +85,61 @@ class Submission(SubmissionSpec12):
                 if not XTag in self._emission_probs:
                     self._emission_probs[XTag] = bigrams_counts[XTag] / self._tag_count[tag]
 
+    def _break_XTag(self, XTag):
+        return XTag.split(self.__SEPERATOR)
+
+    def _reshape_probabilities(self):
+        '''
+        reshapes the dictionaries that were learned into a ndarrays, that will be used in the viterbi algorithm
+        _transition_probs will be reshaped to NXN ndarray and _emission_probs will be reshaped to a dictionary that
+        will hold the an vector of N
+        :return: self
+        '''
+        N = len(self._tag_set)
+        tp = np.zeros((N,N))
+        ep = dict()
+
+        #reshape the transition probabilities
+        for k,v in self._transition_probs.items():
+            tags = self._break_XTag(k)
+            tp[self._tag_to_num[tags[0]], self._tag_to_num[tags[1]]] = v
+        self._transition_probs = tp
+
+        #reshape emission probabilities
+        for k,v in self._emission_probs.items():
+            word_tag = self._break_XTag(k)
+            if not word_tag[0] in ep:
+                ep[word_tag[0]] = np.zeros(N)
+            ep[word_tag[0]][self._tag_to_num[word_tag[1]]] = v
+
+        self._emission_probs = ep
+
+        return self
+
+
+
+    def _viterbi(self, sentence):
+        if sentence is None:
+            return
+        N = len(self._tag_set)
+        T = len(sentence)
+        viterbi_mat = np.zeros((N, T))
+        backpointer = np.zeros((N, T))
+
+        #init the lettece matrix
+        for s in range(N):
+            if sentence[0] in self._emission_probs:
+                viterbi_mat[s, 1] = self._emission_probs[sentence[0]][s]
+
+        #for t in range(1, T):
+        #    for s in range(N):
+
+
+
+
+
+        return
+
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
 
@@ -88,10 +148,12 @@ class Submission(SubmissionSpec12):
         self._count_tags(annotated_sentences)
         self._estimate_emission_probabilites(annotated_sentences)
         self._estimate_transition_probabilites(annotated_sentences)
+        self._reshape_probabilities()
         
         return self 
 
     def predict(self, sentence):
+        self._viterbi(sentence)
         prediction = [random.choice(self._tag_set) for segment in sentence]
         assert (len(prediction) == len(sentence))
         return prediction
