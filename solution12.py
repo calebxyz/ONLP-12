@@ -25,6 +25,11 @@ class Submission(SubmissionSpec12):
         self._tag_to_num = dict()
         for idx, tag in enumerate(self._tag_set):
             self._tag_to_num[tag] = idx
+        self._delta = 0.1
+        self._N = len(self._tag_set)
+
+    def _smooth(self, tag, numerator=0):
+        return (numerator + self._delta) / (self._tag_count[tag] + self._delta*self._N)
 
     def _create_xtag(self, x1, x2):
         return self.__XTAG_PLACE_HOLD.format(x1, x2)
@@ -61,7 +66,7 @@ class Submission(SubmissionSpec12):
                 tag2 = sent[idx+1][self.__TAG_IDX]
                 Xtag = self._create_xtag(tag1, tag2)
                 if not Xtag in self._transition_probs:
-                    self._transition_probs[Xtag] = bigrams_counts[Xtag] / self._tag_count[tag1]
+                    self._transition_probs[Xtag] = self._smooth(tag1, bigrams_counts[Xtag])  #bigrams_counts[Xtag] / self._tag_count[tag1]
 
     def _count_tag_to_word_pairs(self, annotated_sentences):
         counts = dict()
@@ -83,7 +88,7 @@ class Submission(SubmissionSpec12):
                 word = p[self.__WORD_IDX]
                 XTag = self._create_xtag(word, tag)
                 if not XTag in self._emission_probs:
-                    self._emission_probs[XTag] = bigrams_counts[XTag] / self._tag_count[tag]
+                    self._emission_probs[XTag] = self._smooth(tag, bigrams_counts[XTag]) #bigrams_counts[XTag] / self._tag_count[tag]
 
     def _break_XTag(self, XTag):
         return XTag.split(self.__SEPERATOR)
@@ -95,7 +100,7 @@ class Submission(SubmissionSpec12):
         will hold the an vector of N
         :return: self
         '''
-        N = len(self._tag_set)
+        N = self._N
         tp = np.zeros((N,N))
         ep = dict()
 
@@ -116,13 +121,10 @@ class Submission(SubmissionSpec12):
 
         return self
 
-    def _smooth(self, tag, V, delta=0.1):
-        return delta / (self._tag_count[tag] + delta*V)
-
     def _viterbi(self, sentence):
         if sentence is None:
             return
-        N = len(self._tag_set)
+        N = self._N
         T = len(sentence)
         viterbi_mat = np.zeros((N, T))
         backpointer = np.zeros((N, T))
@@ -136,7 +138,7 @@ class Submission(SubmissionSpec12):
             if o_t in self._emission_probs:
                 b_ot = self._emission_probs[o_t][s]
             else:
-                b_ot = self._smooth(o_t, len(self._tag_set))
+                b_ot = self._smooth(self._tag_set[s])
 
             vitmax = np.multiply(viterbi_mat[:, t - 1], self._transition_probs[:, s]) * b_ot
             return func(vitmax)
