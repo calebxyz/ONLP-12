@@ -116,6 +116,9 @@ class Submission(SubmissionSpec12):
 
         return self
 
+    def _smooth(self, tag, V, delta=0.1):
+        return delta / (self._tag_count[tag] + delta*V)
+
     def _viterbi(self, sentence):
         if sentence is None:
             return
@@ -133,7 +136,7 @@ class Submission(SubmissionSpec12):
             if o_t in self._emission_probs:
                 b_ot = self._emission_probs[o_t][s]
             else:
-                return 0
+                b_ot = self._smooth(o_t, len(self._tag_set))
 
             vitmax = np.multiply(viterbi_mat[:, t - 1], self._transition_probs[:, s]) * b_ot
             return func(vitmax)
@@ -145,12 +148,13 @@ class Submission(SubmissionSpec12):
                 backpointer[s, t] = getMaxByFunc(np.argmax, o_t, s, t)
 
         best_path_probe = np.max(viterbi_mat[:, T-1])
-        best_back_pointer = np.argmax(viterbi_mat[:, T-1])
+        best_back_pointer = int(np.argmax(viterbi_mat[:, T-1]))
 
-        best_path = [self._tag_set[int(best_back_pointer)]]
+        best_path = list() #[self._tag_set[int(best_back_pointer)]]
         for t in range(1, T):
             next = int(np.max(backpointer[:, t]))
             best_path.append(self._tag_set[next])
+        best_path.append(self._tag_set[best_back_pointer])
 
         return best_path, best_path_probe
 
