@@ -26,7 +26,7 @@ class Submission(SubmissionSpec12):
         self._tag_to_num = dict()
         for idx, tag in enumerate(self._tag_set):
             self._tag_to_num[tag] = idx
-        self._delta = 0
+        self._delta = 0.1
         self._N = len(self._tag_set)
         self._pis = np.zeros(self._N, dtype=np.float64)
 
