@@ -29,9 +29,26 @@ class Submission(SubmissionSpec12):
         self._delta = 0.1
         self._N = len(self._tag_set)
         self._pis = np.zeros(self._N, dtype=np.float64)
+        self._lambdas = np.zeros(2, dtype=np.float64)
 
     def _smooth(self, tag, numerator=0):
         return (numerator + self._delta) / (self._tag_count[tag] + self._delta*self._N)
+
+    def _beam_search(self, bigram_counts):
+        for t1 in range(self._N):
+            for t2 in range(self._N):
+                XTag = self._create_xtag(self._tag_set[t1], self._tag_set[t2])
+                if XTag in bigram_counts:
+                    bigram_prob  = (bigram_counts[XTag] - 1) / (self._tag_count[self._tag_set[t2]] - 1)
+                    onegram_prob = (self._tag_count[self._tag_set[t2]] - 1) / (self._N - 1)
+                    if bigram_prob > onegram_prob:
+                        self._lambdas[0] += bigram_prob
+                    else:
+                        self._lambdas[1] += bigram_prob
+        self._lambdas = self._lambdas * (1/np.sum(self._lambdas))
+
+    def _liniear_smoothing(self, bigram, onegram):
+        return self._lambdas[0]*bigram + self._lambdas[1] * onegram
 
     def _create_xtag(self, x1, x2):
         return self.__XTAG_PLACE_HOLD.format(x1, x2)
@@ -57,6 +74,7 @@ class Submission(SubmissionSpec12):
                     counts[XTag] = counts[XTag] + 1
 
         self._calc_pis(counts)
+        self._beam_search(counts)
         return counts
 
     def _count_tags(self, annotated_sentences):
