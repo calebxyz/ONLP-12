@@ -166,12 +166,12 @@ class Submission(SubmissionSpec12):
         best_back_pointer = int(np.argmax(viterbi_mat[:, T-1]))
 
         best_path = list() #[self._tag_set[int(best_back_pointer)]]
-        for t in range(1, T):
-            next = int(np.max(backpointer[:, t]))
-            best_path.append(self._tag_set[next])
         best_path.append(self._tag_set[best_back_pointer])
+        for t in reversed(range(0, T-1)):
+            next_tag = int(backpointer[np.argmax(viterbi_mat[:, t+1]), t+1])
+            best_path.append(self._tag_set[next_tag])
 
-        return best_path, best_path_probe
+        return best_path[::-1], best_path_probe
 
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
