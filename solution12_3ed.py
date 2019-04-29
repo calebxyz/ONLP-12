@@ -123,7 +123,7 @@ class Submission(SubmissionSpec12):
 
     def getProb(self, pTag, tag, word):
         if (pTag, tag) in self.t and (tag, word) in self.e:
-            return self.t[(pTag, tag)] / self.t[(pTag)] * self.e[(tag, word)] / self.e[(tag)]  # P("s|ps") * P("w|s")
+            return (self.t[(pTag, tag)] / self.t[(pTag)]) * (self.e[(tag, word)] / self.e[(tag)])  # P("s|ps") * P("w|s")
         else:
             return 0
 
@@ -144,16 +144,14 @@ class Submission(SubmissionSpec12):
             for s in range(0, len(self.tag_set)):
                 self.backpointerMat[s][t], self.viterbiMat[s][t] = self.maxViterbi(sentence, s, t)
 
-        print(self.backpointerMat)
-        bestpathpointer, bestpathprob = self.bestPathViterbi(t)
+        bestpathpointer, bestpathprob = self.bestPathViterbi(len(sentence)-1)
 
         states = [0] * len(sentence)
         for t in reversed(range(0, len(sentence))):
-            states[t] = self.tag_set[self.backpointerMat[bestpathpointer][t]]
-            bestpathpointer = self.backpointerMat[bestpathpointer][t]
+            bestpathpointer, bestpathprob = self.bestPathViterbi(t)
+            states[t] = self.tag_set[bestpathpointer]
 
         states.reverse()
-        print(states)
 
     def predict(self, sentence):
         prediction = [random.choice(self.tag_set) for segment in sentence]

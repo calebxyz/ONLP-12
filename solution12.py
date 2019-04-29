@@ -26,7 +26,7 @@ class Submission(SubmissionSpec12):
         self._tag_to_num = dict()
         for idx, tag in enumerate(self._tag_set):
             self._tag_to_num[tag] = idx
-        self._delta = 0.1
+        self._delta = 0
         self._N = len(self._tag_set)
         self._pis = np.zeros(self._N, dtype=np.float64)
 
@@ -43,9 +43,6 @@ class Submission(SubmissionSpec12):
             if XTag in bigram_counts:
                 #pi calculation shouldn be smoothed it should get zero values if this type of tag never happened
                 self._pis[idx] = bigram_counts.pop(XTag) / self._tag_count[tag]
-
-
-
 
     def _count_tag_bigrams(self, annotated_sentences):
         counts = dict()
