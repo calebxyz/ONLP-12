@@ -174,7 +174,7 @@ class Submission(SubmissionSpec12):
 
         slice = backptr_mat[t]
         for tag in slice:
-            self._calc_best_paths(t-1, backptr_mat, curr_path + [self._tag_set[tag]], paths, found)
+            self._calc_best_paths_impl(t-1, backptr_mat, curr_path + [self._tag_set[tag]], paths, found)
 
         return
 
@@ -201,7 +201,7 @@ class Submission(SubmissionSpec12):
         backptr_mat = [np.unique(backpointer[indxes[t], t]).flatten() for t in range(T)]
         self._calc_best_paths_impl(T - 1, backptr_mat, best_path, best_paths, [0])
 
-        return best_path_probe, best_paths
+        return best_paths, best_path_probe
 
     def _viterbi(self, sentence):
         if sentence is None:
@@ -248,6 +248,7 @@ class Submission(SubmissionSpec12):
     def predict(self, sentence):
         prediction, _ = self._viterbi(sentence)
         #prediction = [random.choice(self._tag_set) for segment in sentence]
-        assert (len(prediction) == len(sentence))
+        for pred in prediction:
+            assert (len(pred) == len(sentence))
         return prediction
             
