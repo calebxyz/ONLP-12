@@ -18,32 +18,63 @@ class Submission(SubmissionSpec12):
     __WORD_IDX = 0
     __SEPERATOR = "#=<*|*>=#"
     __XTAG_PLACE_HOLD = "{}" + __SEPERATOR + "{}"
+    __START_TAG = "<s>"
 
     def __init__(self):
-        self._tag_set = 'ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split()
+        self._tag_set = np.array('ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split())
         self._tag_count = dict()
         self._tag_to_num = dict()
         for idx, tag in enumerate(self._tag_set):
             self._tag_to_num[tag] = idx
         self._delta = 0.1
         self._N = len(self._tag_set)
+        self._pis = np.zeros(self._N, dtype=np.float64)
+        self._lambdas = np.zeros(2, dtype=np.float64)
 
     def _smooth(self, tag, numerator=0):
         return (numerator + self._delta) / (self._tag_count[tag] + self._delta*self._N)
 
+    def _beam_search(self, bigram_counts):
+        for t1 in range(self._N):
+            for t2 in range(self._N):
+                XTag = self._create_xtag(self._tag_set[t1], self._tag_set[t2])
+                if XTag in bigram_counts:
+                    bigram_prob  = (bigram_counts[XTag] - 1) / (self._tag_count[self._tag_set[t2]] - 1)
+                    onegram_prob = (self._tag_count[self._tag_set[t2]] - 1) / (self._N - 1)
+                    if bigram_prob > onegram_prob:
+                        self._lambdas[0] += bigram_prob
+                    else:
+                        self._lambdas[1] += bigram_prob
+        self._lambdas = self._lambdas * (1/np.sum(self._lambdas))
+
+    def _liniear_smoothing(self, bigram, onegram):
+        return self._lambdas[0]*bigram + self._lambdas[1] * onegram
+
     def _create_xtag(self, x1, x2):
         return self.__XTAG_PLACE_HOLD.format(x1, x2)
+
+    def _calc_pis(self, bigram_counts):
+        for idx in range(self._N):
+            tag = self._tag_set[idx]
+            XTag = self._create_xtag(self.__START_TAG, tag)
+            if XTag in bigram_counts:
+                #pi calculation shouldn be smoothed it should get zero values if this type of tag never happened
+                self._pis[idx] = bigram_counts.pop(XTag) / self._tag_count[tag]
 
     def _count_tag_bigrams(self, annotated_sentences):
         counts = dict()
         for sent in annotated_sentences:
-            sent_len = len(sent)
+            sent_startTag = [(self.__START_TAG, self.__START_TAG)] + sent
+            sent_len = len(sent_startTag)
             for idx in range(sent_len - 1):
-                XTag = self._create_xtag(sent[idx][self.__TAG_IDX], sent[idx + 1][self.__TAG_IDX])
+                XTag = self._create_xtag(sent_startTag[idx][self.__TAG_IDX], sent_startTag[idx + 1][self.__TAG_IDX])
                 if not XTag in counts:
                     counts[XTag] = 1
                 else:
                     counts[XTag] = counts[XTag] + 1
+
+        self._calc_pis(counts)
+        self._beam_search(counts)
         return counts
 
     def _count_tags(self, annotated_sentences):
@@ -132,7 +163,7 @@ class Submission(SubmissionSpec12):
         #init the lettece matrix
         for s in range(N):
             if sentence[0] in self._emission_probs:
-                viterbi_mat[s, 0] = self._emission_probs[sentence[0]][s]
+                viterbi_mat[s, 0] = self._emission_probs[sentence[0]][s]*self._pis[s]
 
         def getMaxByFunc(func, o_t, s, t):
             if o_t in self._emission_probs:
@@ -153,12 +184,12 @@ class Submission(SubmissionSpec12):
         best_back_pointer = int(np.argmax(viterbi_mat[:, T-1]))
 
         best_path = list() #[self._tag_set[int(best_back_pointer)]]
-        for t in range(1, T):
-            next = int(np.max(backpointer[:, t]))
-            best_path.append(self._tag_set[next])
         best_path.append(self._tag_set[best_back_pointer])
+        for t in reversed(range(0, T-1)):
+            next_tag = int(backpointer[np.argmax(viterbi_mat[:, t+1]), t+1])
+            best_path.append(self._tag_set[next_tag])
 
-        return best_path, best_path_probe
+        return best_path[::-1], best_path_probe
 
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
