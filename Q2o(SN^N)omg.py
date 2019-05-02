@@ -7,6 +7,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split  # data splitter
 from sklearn.linear_model import LogisticRegression
 import re
+import copy as cp
 
 
 ## project supplied imports
@@ -19,6 +20,7 @@ class Submission(SubmissionSpec12):
     __SEPERATOR = "#=<*|*>=#"
     __XTAG_PLACE_HOLD = "{}" + __SEPERATOR + "{}"
     __START_TAG = "<s>"
+    __NUM_OF_PATHS = 3
 
     def __init__(self):
         self._tag_set = np.array('ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split())
@@ -124,6 +126,32 @@ class Submission(SubmissionSpec12):
     def _break_XTag(self, XTag):
         return XTag.split(self.__SEPERATOR)
 
+    def _calc_all_paths(self, vit_mat, backpointer, indexes, t, curr_path, sum, paths):
+        '''
+        calculate all paths recursively , calc the sum of all probabilities in the path ,
+        this will be used to sort the matrix afterwords
+        :param vit_mat: viterbi matrix
+        :param backpointer: backpointers
+        :param indexes: matrix of indexes to viterbi probabilities
+        :param t: index of the current tag that were looking at
+        :param curr_path: the current path that was allready calculated until this tag
+        :param sum: sum of all viterbi probabilities
+        :param paths: the matrix that will hold all the paths
+        :return: None
+        '''
+        if t == 0:
+            #termination step , if t==0 we dont need to count it and we may append the path and sum to the matrix
+            paths.append((cp.copy(sum), cp.deepcopy(curr_path[::-1])))
+            return
+
+        slice = indexes[t][0]
+        for idx in slice:
+            prob = vit_mat[idx, t]
+            next_tag = int(backpointer[idx, t])
+            self._calc_all_paths(vit_mat, backpointer, indexes, t-1, curr_path + [self._tag_set[next_tag]],
+                                 sum+prob, paths)
+        return
+
     def _reshape_probabilities(self):
         '''
         reshapes the dictionaries that were learned into a ndarrays, that will be used in the viterbi algorithm
@@ -180,16 +208,37 @@ class Submission(SubmissionSpec12):
                 viterbi_mat[s, t] = getMaxByFunc(np.max, o_t, s, t)
                 backpointer[s, t] = getMaxByFunc(np.argmax, o_t, s, t)
 
-        best_path_probe = np.max(viterbi_mat[:, T-1])
-        best_back_pointer = int(np.argmax(viterbi_mat[:, T-1]))
+        '''
+        This section is changed for Q2  , we dont know exactly which paths are the top N paths 
+        due to the fact that some local minimus may be lower then other and then we would like to leave the max of this
+        points for this we will need to find all paths in the viterbi matrix and sum all the probabilities
+        after we will have all paths wee need to sort them and find the 3 best paths from that matrix. 
+        this will be done recursively and we will try to make the run time lower by cutting all cells that are zero from the 
+        viterbi table. in worst case we will run O(ST) again. 
+        '''
 
-        best_path = list() #[self._tag_set[int(best_back_pointer)]]
-        best_path.append(self._tag_set[best_back_pointer])
-        for t in reversed(range(0, T-1)):
-            next_tag = int(backpointer[np.argmax(viterbi_mat[:, t+1]), t+1])
-            best_path.append(self._tag_set[next_tag])
+        best_path_probe = np.max(viterbi_mat[:, T - 1])
+        best_paths = list()
+        indexes = [np.nonzero(viterbi_mat[:, t].flatten()) for t in range(T)]
 
-        return best_path[::-1], best_path_probe
+        self._calc_all_paths(viterbi_mat, backpointer, indexes, T-1, [], 0, best_paths)
+
+        dtype = [('sum', np.float64), ('path', list)]
+        best_paths = np.array(best_paths, dtype=dtype)
+        ton_N_paths = np.sort(best_paths, order='sum')[-self.__NUM_OF_PATHS::]
+
+        #best_back_pointer = int(np.argmax(viterbi_mat[:, T-1]))
+
+        #best_path = list() #[self._tag_set[int(best_back_pointer)]]
+        #best_path.append(self._tag_set[best_back_pointer])
+        #for t in reversed(range(0, T-1)):
+        #    next_tag = int(backpointer[np.argmax(viterbi_mat[:, t+1]), t+1])
+        #    best_path.append(self._tag_set[next_tag])
+
+        #return best_path[::-1], best_path_probe
+
+        return best_path_probe, best_paths
+
 
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
