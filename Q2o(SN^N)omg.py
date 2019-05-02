@@ -126,6 +126,32 @@ class Submission(SubmissionSpec12):
     def _break_XTag(self, XTag):
         return XTag.split(self.__SEPERATOR)
 
+    def _calc_all_paths(self, vit_mat, backpointer, indexes, t, curr_path, sum, paths):
+        '''
+        calculate all paths recursively , calc the sum of all probabilities in the path ,
+        this will be used to sort the matrix afterwords
+        :param vit_mat: viterbi matrix
+        :param backpointer: backpointers
+        :param indexes: matrix of indexes to viterbi probabilities
+        :param t: index of the current tag that were looking at
+        :param curr_path: the current path that was allready calculated until this tag
+        :param sum: sum of all viterbi probabilities
+        :param paths: the matrix that will hold all the paths
+        :return: None
+        '''
+        if t == 0:
+            #termination step , if t==0 we dont need to count it and we may append the path and sum to the matrix
+            paths.append((cp.copy(sum), cp.deepcopy(curr_path[::-1])))
+            return
+
+        slice = indexes[t][0]
+        for idx in slice:
+            prob = vit_mat[idx, t]
+            next_tag = int(backpointer[idx, t])
+            self._calc_all_paths(vit_mat, backpointer, indexes, t-1, curr_path + [self._tag_set[next_tag]],
+                                 sum+prob, paths)
+        return
+
     def _reshape_probabilities(self):
         '''
         reshapes the dictionaries that were learned into a ndarrays, that will be used in the viterbi algorithm
@@ -154,62 +180,13 @@ class Submission(SubmissionSpec12):
 
         return self
 
-    def _calc_best_paths_impl(self, t, backptr_mat, curr_path, paths, found):
-        '''
-        calculates 3 best paths from a recived backpointer that was sorted
-        :param t: current word
-        :param backptr_mat: the matrix that holds all pointers
-        :param curr_path: the path that were probing right now
-        :param paths: all paths will be saved here
-        :param found: how many paths have we found
-        :return:
-        '''
-        if found[0] == self.__NUM_OF_PATHS:
-            return
-
-        if t == 0:
-            paths.append(cp.deepcopy(curr_path[::-1]))
-            found[0] += 1
-            return
-
-        slice = backptr_mat[t]
-        for tag in slice:
-            self._calc_best_paths_impl(t-1, backptr_mat, curr_path + [self._tag_set[tag]], paths, found)
-
-        return
-
-    def _calc_best_paths(self, T, viterbi_mat, backpointer):
-        '''
-        This section is changed for Q2  , we dont know exactly which paths are the top N paths
-        due to the fact that some local minimums may be lower then other and then we would like to leave the max of this
-        points for this we will need to find all paths in the viterbi matrix and sum all the probabilities
-        but that will be very expencive in run time that why we need another way to look at the problem .
-        the backpointer matrix is spars as well and contains values of the states we want to use, most of the states
-        are the same and we can use that to run only on the backpointer table indexes that are diffrent from each other
-        and make the run time even more spars, we will create a table of NXT that contains the index of the backpointer
-        and the probability for that pointer from the viterbi table, the table will be sorted by the probability from
-        max to min so that we will use after the sort we will create max of 3 best paths and then exit
-        because the matrix will be sorted the bigO will be O(Tx3) we will run max 3 times over all the tags and so the
-        O will be O(NLogN*T) due to the fact that we need to sort the marix
-        '''
-        best_path_probe = np.max(viterbi_mat[:, T - 1])
-        best_back_pointer = int(np.argmax(viterbi_mat[:, T - 1]))
-        best_paths = list()
-        best_path = [self._tag_set[best_back_pointer]]
-        # get all the indexes of the viterbi mat when they are sorted from max to min
-        indxes = [np.argsort(viterbi_mat[:, t][viterbi_mat[:, t] > 0].flatten())[::-1] for t in range(T)]
-        backptr_mat = [np.unique(backpointer[indxes[t], t]).flatten() for t in range(T)]
-        self._calc_best_paths_impl(T - 1, backptr_mat, best_path, best_paths, [0])
-
-        return best_paths, best_path_probe
-
     def _viterbi(self, sentence):
         if sentence is None:
             return
         N = self._N
         T = len(sentence)
         viterbi_mat = np.zeros((N, T))
-        backpointer = np.full((N, T), -1)
+        backpointer = np.zeros((N, T))
 
         #init the lettece matrix
         for s in range(N):
@@ -231,7 +208,37 @@ class Submission(SubmissionSpec12):
                 viterbi_mat[s, t] = getMaxByFunc(np.max, o_t, s, t)
                 backpointer[s, t] = getMaxByFunc(np.argmax, o_t, s, t)
 
-        return self._calc_best_paths(T, viterbi_mat, backpointer)
+        '''
+        This section is changed for Q2  , we dont know exactly which paths are the top N paths 
+        due to the fact that some local minimus may be lower then other and then we would like to leave the max of this
+        points for this we will need to find all paths in the viterbi matrix and sum all the probabilities
+        after we will have all paths wee need to sort them and find the 3 best paths from that matrix. 
+        this will be done recursively and we will try to make the run time lower by cutting all cells that are zero from the 
+        viterbi table. in worst case we will run O(ST) again. 
+        '''
+
+        best_path_probe = np.max(viterbi_mat[:, T - 1])
+        best_paths = list()
+        indexes = [np.nonzero(viterbi_mat[:, t].flatten()) for t in range(T)]
+
+        self._calc_all_paths(viterbi_mat, backpointer, indexes, T-1, [], 0, best_paths)
+
+        dtype = [('sum', np.float64), ('path', list)]
+        best_paths = np.array(best_paths, dtype=dtype)
+        ton_N_paths = np.sort(best_paths, order='sum')[-self.__NUM_OF_PATHS::]
+
+        #best_back_pointer = int(np.argmax(viterbi_mat[:, T-1]))
+
+        #best_path = list() #[self._tag_set[int(best_back_pointer)]]
+        #best_path.append(self._tag_set[best_back_pointer])
+        #for t in reversed(range(0, T-1)):
+        #    next_tag = int(backpointer[np.argmax(viterbi_mat[:, t+1]), t+1])
+        #    best_path.append(self._tag_set[next_tag])
+
+        #return best_path[::-1], best_path_probe
+
+        return best_path_probe, best_paths
+
 
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
@@ -248,7 +255,6 @@ class Submission(SubmissionSpec12):
     def predict(self, sentence):
         prediction, _ = self._viterbi(sentence)
         #prediction = [random.choice(self._tag_set) for segment in sentence]
-        for pred in prediction:
-            assert (len(pred) == len(sentence))
+        assert (len(prediction) == len(sentence))
         return prediction
             
