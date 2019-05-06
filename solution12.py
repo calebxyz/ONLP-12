@@ -55,7 +55,7 @@ class Submission(SubmissionSpec12):
     def _calc_pis(self, grams):
         start_grams = dict()
         for k, v in grams.items():
-            if k[0] is (None, None):
+            if k[0] == (None, None):
                 start_grams[(None, k[1][1])] = v
 
         for idx in range(self._N):
