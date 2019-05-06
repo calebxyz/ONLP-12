@@ -26,6 +26,8 @@ class Submission(SubmissionSpec12):
         self._tag_to_num = {tag:idx for idx, tag in enumerate(self._tag_set)}
         self._lrm = LogisticRegression(multi_class='multinominal', solver='lbfgs', max_iter=1000)
         self._ngrams = set()
+        self._N = len(self._tag_set)
+        self._pis = np.zeros(self._N, dtype=np.float64)
 
     def _estimate_transition_probabilites(self, annotated_sentences):
         pass
@@ -50,18 +52,48 @@ class Submission(SubmissionSpec12):
 
         return word_ngrams  # return value used for test only
 
+    def _calc_pis(self, grams):
+        start_grams = dict()
+        for k, v in grams.items():
+            if k[0] is (None, None):
+                start_grams[(None, k[1][1])] = v
+
+        for idx in range(self._N):
+            tag = self._tag_set[idx]
+            gram = (None, self._tag_set[idx])
+            if gram in grams.keys():
+                self._pis[idx] = start_grams[gram] / self._tag_count[tag]
+
     def _get_vocabulary(self, sentences):
+        '''
+        calculates all needed initial parts , trigrams, number of words set of words
+        counts tags and pis
+        :param sentences: sentences to inspect
+        :return: vocabulary
+        '''
         V = set()
-        grams = set()
+        grams = dict()
 
-
+        self._total_ngrams = 0
+        self.total_words = 0
+        self._tag_count = dict()
         for sentence in sentences:
             for idx, token in enumerate(sentence):
                 gram = self._create_trigram(sentence, idx)
                 V.add(token[self.__WORD_IDX])
-                grams.add(gram)
+                if gram in grams.keys():
+                    grams[gram] += 1
+                else:
+                    grams[gram] = 1
+                if token[self.__TAG_IDX] in  self._tag_count.keys():
+                    self._tag_count[token[self.__TAG_IDX]] += 1
+                else:
+                    self._tag_count[token[self.__TAG_IDX]] = 1
+                self._total_ngrams += 1
+                self.total_words += 1
 
-        #set unique words and unique trigrams
+        self._calc_pis(grams)
+
         self._word_count = len(V)
         self._trigram_count = len(grams)
         return V
@@ -72,9 +104,8 @@ class Submission(SubmissionSpec12):
             self._ngrams |= self._get_word_ngrams(min_ngram, max_ngram, t)
 
     def _create_vectors(self, sentences):
-        self._3gram_dict = set()
-        y = np.zeros(self._trigram_count)
-        X = np.zeros(self._trigram_count, dtype=list)
+        y = np.zeros(self._total_ngrams)
+        X = np.zeros(self._total_ngrams, dtype=list)
 
         #location in vect
         loc = 0
@@ -164,29 +195,23 @@ class Submission(SubmissionSpec12):
         return tuple(gram)
 
     def _vectorize(self, sentence, idx):
-        gram = self._create_trigram(sentence, idx)
+        vec1 = self._word_vectorize(sentence[idx][self.__WORD_IDX], sentence[idx][self.__TAG_IDX])
 
-        if gram not in self._3gram_dict:
-            self._3gram_dict.add(gram)
+        if idx > 0:
+            vec2 = self._word_vectorize(sentence[idx-1][self.__WORD_IDX], sentence[idx-1][self.__TAG_IDX])
+        else:
+            # an all-zeros vector the length of the word vector (this is arbitrary)
+            vec2 = [0] * len(vec1)
 
-            vec1 = self._word_vectorize(gram[1][0], gram[1][1])
+        if idx < len(sentence) - 1:
+            vec3 = self._word_vectorize(sentence[idx+1][self.__WORD_IDX], sentence[idx+1][self.__TAG_IDX])
+        else:
+            # an all-zeros vector the length of the word vector (this is arbitrary)
+            vec3 = [0] * len(vec1)
 
-            if gram[0][0] and gram[0][1]:
-                vec2 = self._word_vectorize(gram[0][0], gram[0][1])
-            else:
-                # an all-zeros vector the length of the word vector (this is arbitrary)
-                vec2 = [0] * len(vec1)
+        # our feature vector
+        return vec1 + vec2 + vec3
 
-            if gram[2][0] and gram[2][1]:
-                vec3 = self._word_vectorize(gram[2][0], gram[2][1])
-            else:
-                # an all-zeros vector the length of the word vector (this is arbitrary)
-                vec3 = [0] * len(vec1)
-
-            # our feature vector
-            return vec1 + vec2 + vec3
-
-        return None
 
     '''def _viterbi(self, sentence):
         if sentence is None:
