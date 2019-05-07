@@ -15,7 +15,7 @@ class Submission(SubmissionSpec12):
     ''' a contrived poorely performing solution for question one of this Maman '''
 
     def __init__(self):
-        self.N = 3
+        self.N = 2
         self.tag_set = 'ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split()
         self.e = dict()
 
