@@ -19,6 +19,10 @@ class Submission(SubmissionSpec12):
         self.tag_set = 'ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split()
         self.e = dict()
 
+        self.n_tag_set = list(itertools.product(self.tag_set, repeat=self.N))
+        for i in range(1, self.N):
+            self.n_tag_set += list(("SOS",) * i + x for x in itertools.product(self.tag_set, repeat=max(0, self.N - i)))
+
         self.p_tag_set = list(itertools.product(self.tag_set, repeat=self.N - 1))
         for i in range(1, self.N - 1):
             self.p_tag_set += list(("SOS",) * i + x for x in itertools.product(self.tag_set, repeat=max(0, (self.N - 1)- i)))
@@ -44,6 +48,8 @@ class Submission(SubmissionSpec12):
 
         self.tp = dict()
         self.ep = dict()
+        self.delta = 0.1
+        self.V = 1
 
 
     def _estimate_emission_probabilites(self, annotated_sentences):
@@ -58,12 +64,16 @@ class Submission(SubmissionSpec12):
 
                 if pair[0] not in self.e:
                     self.e[pair[0]] = 1
+                    self.V += 1
                 else:
                     self.e[pair[0]] += 1
 
         for k, v in self.e.items():
-            if len(k) == 2:
-                self.ep[k] = self.e[k] / self.e[k[0]]
+            if isinstance(k, str):
+                self.ep[k] = self.delta / (self.e[k] + self.delta * self.V)
+            else:
+                self.ep[k] = (self.e[k] + self.delta) / (self.e[k[0]] + self.delta * self.V)
+
 
 
     
@@ -104,7 +114,7 @@ class Submission(SubmissionSpec12):
         print('training function received {} annotated sentences as training data'.format(len(annotated_sentences)))
         self._estimate_emission_probabilites(annotated_sentences)
         self._estimate_transition_probabilites(annotated_sentences)
-
+        self.lambdas = self.deleted_interpolation()
         return self
 
     def maxViterbi(self, sentence, s, t):
@@ -144,29 +154,54 @@ class Submission(SubmissionSpec12):
         mul = 1
 
         if self.N > 2:
-            if len(tag) == 1:
-                mul = 0.01
-            elif len(tag) == 2:
-                mul = 0.39
-            elif len(tag) == 3:
-                mul = 0.6
+            mul = self.lambdas[len(tag)-1]
 
         if len(tag) == self.N:
             emitTag = (tag[-1],) + (word,)
             if emitTag not in self.ep:
-                return 0
+                if self.delta == 0:
+                    return 0
+                else:
+                    eprob = self.ep[tag[-1]]
             else:
                 eprob = self.ep[emitTag] #/ self.e[tag[-1]]
+
+            if self.N > 2:
                 return (mul * self.tp[tag] + self.getProb(tag[1:], word)) * eprob
+            else:
+                return self.tp[tag] * eprob
+
         elif len(tag) > 1:
-            prob += self.getProb(tag[1:], word)
+            prob = self.getProb(tag[1:], word)
 
         return (mul * self.tp[tag]) + prob
 
 
-    # def deleted_interpolation(self, corpus):
-    #     lambdas = [0] * self.N
-    #     for s in self.all_tag_set
+    def deleted_interpolation(self):
+        lambdas = [0.0] * self.N
+        allTagCounts = self.t["ALL"]
+
+        for tag in self.n_tag_set:
+            if self.t[tag] > 0:
+                cases = [0.0] * self.N
+                for size in range(2, self.N + 1):
+                    #dominator is less by 1
+                    if self.t[tag[self.N - (size - 1):]] - 1 == 0:
+                        cases[size - 1] = 0
+                    else:
+                        cases[size - 1] = (self.t[tag[self.N - size:]] - 1)/(self.t[tag[self.N - (size - 1):]] - 1)
+
+                #size of one tag
+                cases[0] = (self.t[tag[self.N - 1:]] - 1) / allTagCounts
+
+                maxPos = cases.index(max(cases))
+                lambdas[maxPos] += self.t[tag]
+
+        sum_lambdas = sum(lambdas)
+        return [x / sum_lambdas for x in lambdas]
+
+
+
 
 
     def viterbi(self, sentence):
