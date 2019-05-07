@@ -102,7 +102,6 @@ class Submission(SubmissionSpec12):
 
         self._word_count = len(V)
         self._trigram_count = len(self._tri_grams)
-        self._fv_size = len(self._ngrams) * 3 + 10 + len(self._tag_set) #size of the feature vector
         return V
 
     def _create_ngrams_list(self, sentences, min_ngram=1, max_ngram=3):
@@ -112,7 +111,7 @@ class Submission(SubmissionSpec12):
 
     def _create_vectors(self, sentences):
         y = np.zeros(self._total_ngrams)
-        X = np.zeros((self._total_ngrams, self._fv_size))
+        X = np.zeros(self._total_ngrams, dtype=list)
 
         #location in vect
         loc = 0
@@ -121,11 +120,11 @@ class Submission(SubmissionSpec12):
             c  = self._tag_to_num[gram[1][1]]
 
             y[loc:loc+times] = c
-            X[loc:loc+times, :] = fv
 
+            for t in range(times):
+                X[loc+t] = fv
 
             loc += times
-
 
         assert len(y) == len(X)
 
@@ -252,6 +251,7 @@ class Submission(SubmissionSpec12):
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
         self._create_ngrams_list(annotated_sentences)
+        self._fv_size = len(self._ngrams) * 3 + 10 + len(self._tag_set)  # size of the feature vector
         X, y = self._create_vectors(annotated_sentences)
         self._lrm.fit(X, y)
         return self
