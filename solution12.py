@@ -20,6 +20,8 @@ class Submission(SubmissionSpec12):
     __START_TAG = "<s>"
     __END_TAG = "<e>"
     __NUM_OF_PATHS = 3
+    __START_GRAM = (None, None)
+    __END_GRAM   = (None, None)
 
     def __init__(self):
         self._tag_set = np.array('ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split())
@@ -55,13 +57,17 @@ class Submission(SubmissionSpec12):
     def _calc_pis(self, grams):
         start_grams = dict()
         for k, v in grams.items():
-            if k[0] == (None, None):
-                start_grams[(None, k[1][1])] = v
+            if k[0] == self.__START_GRAM:
+                work_gram = (None, k[1][1])
+                if work_gram not in start_grams:
+                    start_grams[work_gram] = v
+                else:
+                    start_grams[work_gram] += v
 
         for idx in range(self._N):
             tag = self._tag_set[idx]
             gram = (None, self._tag_set[idx])
-            if gram in grams.keys():
+            if gram in start_grams:
                 self._pis[idx] = start_grams[gram] / self._tag_count[tag]
 
     def _get_vocabulary(self, sentences):
@@ -72,7 +78,7 @@ class Submission(SubmissionSpec12):
         :return: vocabulary
         '''
         V = set()
-        grams = dict()
+        self._tri_grams = dict()
 
         self._total_ngrams = 0
         self.total_words = 0
@@ -81,10 +87,10 @@ class Submission(SubmissionSpec12):
             for idx, token in enumerate(sentence):
                 gram = self._create_trigram(sentence, idx)
                 V.add(token[self.__WORD_IDX])
-                if gram in grams.keys():
-                    grams[gram] += 1
+                if gram in self._tri_grams.keys():
+                    self._tri_grams[gram] += 1
                 else:
-                    grams[gram] = 1
+                    self._tri_grams[gram] = 1
                 if token[self.__TAG_IDX] in  self._tag_count.keys():
                     self._tag_count[token[self.__TAG_IDX]] += 1
                 else:
@@ -92,10 +98,11 @@ class Submission(SubmissionSpec12):
                 self._total_ngrams += 1
                 self.total_words += 1
 
-        self._calc_pis(grams)
+        self._calc_pis(self._tri_grams)
 
         self._word_count = len(V)
-        self._trigram_count = len(grams)
+        self._trigram_count = len(self._tri_grams)
+        self._fv_size = len(self._ngrams) * 3 + 10 + len(self._tag_set) #size of the feature vector
         return V
 
     def _create_ngrams_list(self, sentences, min_ngram=1, max_ngram=3):
@@ -105,17 +112,20 @@ class Submission(SubmissionSpec12):
 
     def _create_vectors(self, sentences):
         y = np.zeros(self._total_ngrams)
-        X = np.zeros(self._total_ngrams, dtype=list)
+        X = np.zeros((self._total_ngrams, self._fv_size))
 
         #location in vect
         loc = 0
-        for sentence in sentences:
-            for idx, pair in enumerate(sentence):
-                x = self._vectorize(sentence, idx)
-                if x is not None:
-                    X[loc] = x
-                    y[loc] = self._tag_to_num[pair[self.__TAG_IDX]]
-                loc += 1
+        for gram, times in self._tri_grams.items():
+            fv = self._vectorize(gram)
+            c  = self._tag_to_num[gram[1][1]]
+
+            y[loc:loc+times] = c
+            X[loc:loc+times, :] = fv
+
+
+            loc += times
+
 
         assert len(y) == len(X)
 
@@ -125,7 +135,7 @@ class Submission(SubmissionSpec12):
         '''size of the vector is size of ngrams * 3 + is all upper + starts with capital
         + has numbers and dash + has a number + special letter + word shape capitals to regulars, num of capitals,
         num of regulars, num of punct, num of numbers and N for number of states'''
-        vect = np.zeros(len(self._ngrams)*3 + 10 + len(self._tag_set))
+        vect = np.zeros(self._fv_size)
         offset = 0
         offest_count = 3
 
@@ -178,7 +188,7 @@ class Submission(SubmissionSpec12):
         return vect
 
     def _create_trigram(self, sentence, idx):
-        gram = [(None, None), (None, None), (None, None)]
+        gram = [self.__START_GRAM, self.__START_GRAM, self.__END_GRAM]
 
         def assign_grams(gid, id):
             grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
@@ -194,23 +204,19 @@ class Submission(SubmissionSpec12):
 
         return tuple(gram)
 
-    def _vectorize(self, sentence, idx):
-        vec1 = self._word_vectorize(sentence[idx][self.__WORD_IDX], sentence[idx][self.__TAG_IDX])
+    def _vectorize(self, gram):
+        vector = np.zeros(3*self._fv_size) #3 vectors will be created here
 
-        if idx > 0:
-            vec2 = self._word_vectorize(sentence[idx-1][self.__WORD_IDX], sentence[idx-1][self.__TAG_IDX])
-        else:
-            # an all-zeros vector the length of the word vector (this is arbitrary)
-            vec2 = [0] * len(vec1)
+        vector[0:self._fv_size] = self._word_vectorize(gram[1][self.__WORD_IDX], gram[1][self.__TAG_IDX])
 
-        if idx < len(sentence) - 1:
-            vec3 = self._word_vectorize(sentence[idx+1][self.__WORD_IDX], sentence[idx+1][self.__TAG_IDX])
-        else:
-            # an all-zeros vector the length of the word vector (this is arbitrary)
-            vec3 = [0] * len(vec1)
+        if gram[0] != self.__START_GRAM:
+            vector[self._fv_size:self._fv_size*2] = self._word_vectorize(gram[0][self.__WORD_IDX], gram[0][self.__TAG_IDX])
+
+        if gram[2] != self.__END_GRAM:
+            vector[self._fv_size*2:self._fv_size*3] = self._word_vectorize(gram[2][self.__WORD_IDX], gram[2][self.__TAG_IDX])
 
         # our feature vector
-        return vec1 + vec2 + vec3
+        return vector
 
 
     '''def _viterbi(self, sentence):
