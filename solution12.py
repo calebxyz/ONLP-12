@@ -109,7 +109,7 @@ class Submission(SubmissionSpec12):
         for t in V:
             self._ngrams |= self._get_word_ngrams(min_ngram, max_ngram, t)
 
-    def _create_vectors(self):
+    def _create_vectors(self, sentences):
         #TODO: check if we can train on one ngram at a time or we need to multiply the ngrams
         '''y = np.zeros(self._total_ngrams)
         X = np.zeros(self._total_ngrams, dtype=list)'''
@@ -137,7 +137,7 @@ class Submission(SubmissionSpec12):
 
         return X, y
 
-    def _word_vectorize(self, word, vect, start=0, main_word=False):
+    def _word_vectorize(self, word, tag, vect, start=0, main_word=False):
         '''size of the vector is size of ngrams * 3 + is all upper + starts with capital
         + has numbers and dash + has a number + special letter + word shape capitals to regulars, num of capitals,
         num of regulars, num of punct, num of numbers and N for number of states'''
@@ -190,6 +190,8 @@ class Submission(SubmissionSpec12):
         vect[offset + 2] = len(nums)
         vect[offset + 3] = len(punct)
 
+        vect[offset + 4 + self._tag_to_num[tag]] = 1
+
         return vect
 
     def _create_trigram(self, sentence, idx):
@@ -213,13 +215,13 @@ class Submission(SubmissionSpec12):
         # the size of the vector is fv_len and two words between it
         vector = np.zeros(self._fv_size + 2*self._fv_size_no_ngrams)
 
-        self._word_vectorize(gram[1][self.__WORD_IDX], vector, 0, True)
+        self._word_vectorize(gram[1][self.__WORD_IDX], gram[1][self.__TAG_IDX], vector, 0, True)
 
         if gram[0] != self.__START_GRAM:
-             self._word_vectorize(gram[0][self.__WORD_IDX], vector, self._fv_size)
+             self._word_vectorize(gram[0][self.__WORD_IDX], gram[0][self.__TAG_IDX], vector, self._fv_size)
 
         if gram[2] != self.__END_GRAM:
-             self._word_vectorize(gram[2][self.__WORD_IDX], vector, self._fv_size+self._fv_size_no_ngrams)
+             self._word_vectorize(gram[2][self.__WORD_IDX], gram[2][self.__TAG_IDX], vector, self._fv_size+self._fv_size_no_ngrams)
 
         # our feature vector
         return vector
@@ -261,9 +263,9 @@ class Submission(SubmissionSpec12):
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
         self._create_ngrams_list(annotated_sentences)
-        self._fv_size = len(self._ngrams) * 2 + 10  # size of the feature vector
+        self._fv_size = len(self._ngrams) * 2 + 10 + len(self._tag_set)  # size of the feature vector
         self._fv_size_no_ngrams = 10 + len(self._tag_set)
-        X, y = self._create_vectors()
+        X, y = self._create_vectors(annotated_sentences)
         self._lrm.fit(X, y)
         return self
 
