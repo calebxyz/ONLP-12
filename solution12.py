@@ -26,7 +26,7 @@ class Submission(SubmissionSpec12):
     def __init__(self):
         self._tag_set = np.array('ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split())
         self._tag_to_num = {tag:idx for idx, tag in enumerate(self._tag_set)}
-        self._lrm = LogisticRegression(multi_class='multinominal', solver='lbfgs', max_iter=1000)
+        self._lrm = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
         self._ngrams = set()
         self._N = len(self._tag_set)
         self._pis = np.zeros(self._N, dtype=np.float64)
@@ -114,7 +114,7 @@ class Submission(SubmissionSpec12):
         '''y = np.zeros(self._total_ngrams)
         X = np.zeros(self._total_ngrams, dtype=list)'''
         y = np.zeros(len(self._tri_grams))
-        X = np.zeros(len(self._tri_grams), dtype=list)
+        X = [0] * len(self._tri_grams)
 
         #location in vect
         loc = 0
