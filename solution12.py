@@ -204,11 +204,14 @@ class Submission(SubmissionSpec12):
 
         return vect
 
-    def _create_trigram(self, sentence, idx):
+    def _create_trigram(self, sentence, idx, states=None):
         gram = [self.__START_GRAM, self.__START_GRAM, self.__END_GRAM]
 
         def assign_grams(gid, id):
-            grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
+            if not states:
+                grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
+            else:
+                grm = (sentence[id][self.__WORD_IDX], states[gid])
             gram[gid] = tuple(grm)
 
         assign_grams(1, idx)
@@ -236,9 +239,9 @@ class Submission(SubmissionSpec12):
         # our feature vector
         return vector
 
-    def _get_lrm_prediction(self, sentence, idx, state):
-        X = np.zeros(self._fv_size)
-        self._word_vectorize(sentence[idx], self._tag_set[state], X)
+    def _get_lrm_prediction(self, sentence, idx, states=None):
+        gram = self._create_trigram(sentence, idx, states)
+        X = self._vectorize(gram)
         return self._lrm.predict_proba(X)
 
     def _viterbi(self, sentence):
@@ -250,12 +253,12 @@ class Submission(SubmissionSpec12):
         backpointer = np.full((N, T), -1)
         #init the lettece matrix
         for s in range(N):
-            pred = self._get_lrm_prediction(sentence, 0, s)
+            pred = self._get_lrm_prediction(sentence, 0, [None, s, s+1])
             viterbi_mat[s, 0] = pred[s]*self._pis[s]
 
         for t in range(1, T):
             for s in range(N):
-                pred = self._get_lrm_prediction(sentence, t, s)
+                pred = self._get_lrm_prediction(sentence, t, [s-1, s, s+1])
                 viterbi_mat[s, t] = np.max(pred)
                 backpointer[s, t] = np.argmax(pred)
 
