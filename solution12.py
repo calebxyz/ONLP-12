@@ -211,7 +211,7 @@ class Submission(SubmissionSpec12):
             if not states:
                 grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
             else:
-                grm = (sentence[id][self.__WORD_IDX], states[gid])
+                grm = (sentence[id], self._tag_set[gid])
             gram[gid] = tuple(grm)
 
         assign_grams(1, idx)
@@ -231,10 +231,10 @@ class Submission(SubmissionSpec12):
         self._word_vectorize(gram[1][self.__WORD_IDX], gram[1][self.__TAG_IDX], vector, 0, True)
 
         if gram[0] != self.__START_GRAM:
-             self._word_vectorize(gram[0][self.__WORD_IDX], gram[0][self.__TAG_IDX], vector, self._fv_size)
+            self._word_vectorize(gram[0][self.__WORD_IDX], gram[0][self.__TAG_IDX], vector, self._fv_size)
 
         if gram[2] != self.__END_GRAM:
-             self._word_vectorize(gram[2][self.__WORD_IDX], gram[2][self.__TAG_IDX], vector, self._fv_size+self._fv_size_no_ngrams)
+            self._word_vectorize(gram[2][self.__WORD_IDX], gram[2][self.__TAG_IDX], vector, self._fv_size+self._fv_size_no_ngrams)
 
         # our feature vector
         return vector
@@ -257,10 +257,13 @@ class Submission(SubmissionSpec12):
             viterbi_mat[s, 0] = pred[s]*self._pis[s]
 
         for t in range(1, T):
-            for s in range(N):
-                pred = self._get_lrm_prediction(sentence, t, [s-1, s, s+1])
-                viterbi_mat[s, t] = np.max(pred)
-                backpointer[s, t] = np.argmax(pred)
+            for s_i in range(N):
+                pred = np.zeros(N)
+                for s_j in range(N):
+                    pred[s_j] = self._get_lrm_prediction(sentence, t, [s_i, s_j, s_i+1])[s_j]
+                vitmax = pred * viterbi_mat[:, t-1]
+                viterbi_mat[s_i, t] = np.max(vitmax)
+                backpointer[s_i, t] = np.argmax(vitmax)
 
         best_path_probe = np.max(viterbi_mat[:, T - 1])
         best_back_pointer = int(np.argmax(viterbi_mat[:, T - 1]))
