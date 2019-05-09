@@ -197,7 +197,7 @@ class Submission(SubmissionSpec12):
     def _create_trigram(self, sentence, idx):
         gram = [self.__START_GRAM, self.__START_GRAM, self.__END_GRAM]
 
-        def assign_grams(gid, id, state):
+        def assign_grams(gid, id):
             grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
             gram[gid] = tuple(grm)
 
