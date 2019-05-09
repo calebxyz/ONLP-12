@@ -283,5 +283,5 @@ class Submission(SubmissionSpec12):
         return self
 
     def predict(self, sentence):
-        prediction, _ = (None, None)
+        prediction, _ = self._viterbi(sentence)
         return prediction
