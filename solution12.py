@@ -22,6 +22,7 @@ class Submission(SubmissionSpec12):
     __NUM_OF_PATHS = 3
     __START_GRAM = (None, None)
     __END_GRAM   = (None, None)
+    __SPECIAL_FEATURES_NUM = 11
 
     def __init__(self):
         self._tag_set = np.array('ADJ ADP PUNCT ADV AUX SYM INTJ CCONJ X NOUN DET PROPN NUM VERB PART PRON SCONJ'.split())
@@ -104,7 +105,7 @@ class Submission(SubmissionSpec12):
         self._trigram_count = len(self._tri_grams)
         return V
 
-    def _create_ngrams_list(self, sentences, min_ngram=2, max_ngram=2):
+    def _create_ngrams_list(self, sentences, min_ngram=1, max_ngram=2):
         V = self._get_vocabulary(sentences)
         for t in V:
             self._ngrams |= self._get_word_ngrams(min_ngram, max_ngram, t)
@@ -181,7 +182,16 @@ class Submission(SubmissionSpec12):
             vect[offset] = 1
         offset += 1
 
-        if 'a' in word or 'e' in word or 'u' in word or 'o' in word or 'i' in word:
+        if 'ing' in word:
+            vect[offset] = 1
+        offset += 1
+
+        tmpWord = word.lower()
+        if 'a' in tmpWord or 'e' in tmpWord or 'u' in tmpWord or 'o' in tmpWord or 'i' in tmpWord:
+            vect[offset] = 1
+        offset += 1
+
+        if 'ing' in tmpWord:
             vect[offset] = 1
         offset += 1
 
@@ -263,8 +273,8 @@ class Submission(SubmissionSpec12):
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
         self._create_ngrams_list(annotated_sentences)
-        self._fv_size = len(self._ngrams) * 2 + 10 + len(self._tag_set)  # size of the feature vector
-        self._fv_size_no_ngrams = 10 + len(self._tag_set)
+        self._fv_size = len(self._ngrams) * 2 + self.__SPECIAL_FEATURES_NUM + len(self._tag_set)  # size of the feature vector
+        self._fv_size_no_ngrams = self.__SPECIAL_FEATURES_NUM + len(self._tag_set)
         X, y = self._create_vectors(annotated_sentences)
         self._lrm.fit(X, y)
         return self
