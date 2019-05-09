@@ -104,14 +104,17 @@ class Submission(SubmissionSpec12):
         self._trigram_count = len(self._tri_grams)
         return V
 
-    def _create_ngrams_list(self, sentences, min_ngram=1, max_ngram=3):
+    def _create_ngrams_list(self, sentences, min_ngram=2, max_ngram=2):
         V = self._get_vocabulary(sentences)
         for t in V:
             self._ngrams |= self._get_word_ngrams(min_ngram, max_ngram, t)
 
     def _create_vectors(self, sentences):
-        y = np.zeros(self._total_ngrams)
-        X = np.zeros(self._total_ngrams, dtype=list)
+        #TODO: check if we can train on one ngram at a time or we need to multiply the ngrams
+        '''y = np.zeros(self._total_ngrams)
+        X = np.zeros(self._total_ngrams, dtype=list)'''
+        y = np.zeros(len(self._tri_grams))
+        X = np.zeros(len(self._tri_grams), dtype=list)
 
         #location in vect
         loc = 0
@@ -119,34 +122,39 @@ class Submission(SubmissionSpec12):
             fv = self._vectorize(gram)
             c  = self._tag_to_num[gram[1][1]]
 
-            y[loc:loc+times] = c
+            '''y[loc:loc+times] = c
 
             for t in range(times):
                 X[loc+t] = fv
 
-            loc += times
+            loc += times'''
+
+            y[loc] = c
+            X[loc] = fv
+            loc += 1
 
         assert len(y) == len(X)
 
         return X, y
 
-    def _word_vectorize(self, word, tag):
+    def _word_vectorize(self, word, tag, vect, start=0, main_word=False):
         '''size of the vector is size of ngrams * 3 + is all upper + starts with capital
         + has numbers and dash + has a number + special letter + word shape capitals to regulars, num of capitals,
         num of regulars, num of punct, num of numbers and N for number of states'''
-        vect = np.zeros(self._fv_size)
-        offset = 0
-        offest_count = 3
+        offset = start
+        offest_count = 2
 
-        #check if word contains starts with or ends with one of the ngrams
-        for ngram in self._ngrams:
-            if ngram in word:
-                vect[offset] = 1
-            if word.startswith(ngram):
-                vect[offset + 1] = 1
-            if word.endswith(ngram):
-                vect[offset + 2] = 1
-            offset += offest_count
+        if main_word:
+            #check if word contains starts with or ends with one of the ngrams
+            for ngram in self._ngrams:
+                '''if ngram in word:
+                    vect[offset] = 1'''
+                if word.startswith(ngram):
+                    vect[offset] = 1
+                if word.endswith(ngram):
+                   vect[offset + 1] = 1
+                offset += offest_count
+
 
         caps = re.findall("[A-Z]", word)
         nums = re.findall("[0-9]", word)
@@ -189,7 +197,7 @@ class Submission(SubmissionSpec12):
     def _create_trigram(self, sentence, idx):
         gram = [self.__START_GRAM, self.__START_GRAM, self.__END_GRAM]
 
-        def assign_grams(gid, id):
+        def assign_grams(gid, id, state):
             grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
             gram[gid] = tuple(grm)
 
@@ -204,54 +212,59 @@ class Submission(SubmissionSpec12):
         return tuple(gram)
 
     def _vectorize(self, gram):
-        vector = np.zeros(3*self._fv_size) #3 vectors will be created here
+        # the size of the vector is fv_len and two words between it
+        vector = np.zeros(self._fv_size + 2*self._fv_size_no_ngrams)
 
-        vector[0:self._fv_size] = self._word_vectorize(gram[1][self.__WORD_IDX], gram[1][self.__TAG_IDX])
+        self._word_vectorize(gram[1][self.__WORD_IDX], gram[1][self.__TAG_IDX], vector, 0, True)
 
         if gram[0] != self.__START_GRAM:
-            vector[self._fv_size:self._fv_size*2] = self._word_vectorize(gram[0][self.__WORD_IDX], gram[0][self.__TAG_IDX])
+             self._word_vectorize(gram[0][self.__WORD_IDX], gram[0][self.__TAG_IDX], vector, self._fv_size)
 
         if gram[2] != self.__END_GRAM:
-            vector[self._fv_size*2:self._fv_size*3] = self._word_vectorize(gram[2][self.__WORD_IDX], gram[2][self.__TAG_IDX])
+             self._word_vectorize(gram[2][self.__WORD_IDX], gram[2][self.__TAG_IDX], vector, self._fv_size+self._fv_size_no_ngrams)
 
         # our feature vector
         return vector
 
+    def _get_lrm_prediction(self, sentence, idx, state):
+        X = np.zeros(self._fv_size)
+        self._word_vectorize(sentence[idx], self._tag_set[state], X)
+        return self._lrm.predict_proba(X)
 
-    '''def _viterbi(self, sentence):
+    def _viterbi(self, sentence):
         if sentence is None:
             return
         N = self._N
         T = len(sentence)
         viterbi_mat = np.zeros((N, T))
         backpointer = np.full((N, T), -1)
-
         #init the lettece matrix
         for s in range(N):
-            if sentence[0] in self._emission_probs:
-                viterbi_mat[s, 0] = self._emission_probs[sentence[0]][s]*self._pis[s]
-
-        def getMaxByFunc(func, o_t, s, t):
-            if o_t in self._emission_probs:
-                b_ot = self._emission_probs[o_t][s]
-            else:
-                b_ot = self._smooth(self._tag_set[s])
-
-            vitmax = np.multiply(viterbi_mat[:, t - 1], self._transition_probs[:, s]) * b_ot
-            return func(vitmax)
+            pred = self._get_lrm_prediction(sentence, 0, s)
+            viterbi_mat[s, 0] = pred[s]*self._pis[s]
 
         for t in range(1, T):
             for s in range(N):
-                o_t = sentence[t]
-                viterbi_mat[s, t] = getMaxByFunc(np.max, o_t, s, t)
-                backpointer[s, t] = getMaxByFunc(np.argmax, o_t, s, t)
+                pred = self._get_lrm_prediction(sentence, t, s)
+                viterbi_mat[s, t] = np.max(pred)
+                backpointer[s, t] = np.argmax(pred)
 
-        return self._calc_best_paths(T, viterbi_mat, backpointer)'''
+        best_path_probe = np.max(viterbi_mat[:, T - 1])
+        best_back_pointer = int(np.argmax(viterbi_mat[:, T - 1]))
+
+        best_path = list()  # [self._tag_set[int(best_back_pointer)]]
+        best_path.append(self._tag_set[best_back_pointer])
+        for t in reversed(range(0, T - 1)):
+            next_tag = int(backpointer[np.argmax(viterbi_mat[:, t + 1]), t + 1])
+            best_path.append(self._tag_set[next_tag])
+
+        return best_path[::-1], best_path_probe
 
     def train(self, annotated_sentences):
         ''' trains the HMM model (computes the probability distributions) '''
         self._create_ngrams_list(annotated_sentences)
-        self._fv_size = len(self._ngrams) * 3 + 10 + len(self._tag_set)  # size of the feature vector
+        self._fv_size = len(self._ngrams) * 2 + 10 + len(self._tag_set)  # size of the feature vector
+        self._fv_size_no_ngrams = 10 + len(self._tag_set)
         X, y = self._create_vectors(annotated_sentences)
         self._lrm.fit(X, y)
         return self
