@@ -241,7 +241,7 @@ class Submission(SubmissionSpec12):
 
     def _get_lrm_prediction(self, sentence, idx, states=None):
         gram = self._create_trigram(sentence, idx, states)
-        X = self._vectorize(gram)
+        X = self._vectorize(gram).reshape(1, -1)
         return self._lrm.predict_proba(X)
 
     def _viterbi(self, sentence):
@@ -254,13 +254,13 @@ class Submission(SubmissionSpec12):
         #init the lettece matrix
         for s in range(N):
             pred = self._get_lrm_prediction(sentence, 0, [None, s, s+1])
-            viterbi_mat[s, 0] = pred[s]*self._pis[s]
+            viterbi_mat[s, 0] = pred[0][s]*self._pis[s]
 
         for t in range(1, T):
             for s_i in range(N):
                 pred = np.zeros(N)
                 for s_j in range(N):
-                    pred[s_j] = self._get_lrm_prediction(sentence, t, [s_i, s_j, s_i+1])[s_j]
+                    pred[s_j] = self._get_lrm_prediction(sentence, t, [s_i, s_j, s_i+1])[0][s_j]
                 vitmax = pred * viterbi_mat[:, t-1]
                 viterbi_mat[s_i, t] = np.max(vitmax)
                 backpointer[s_i, t] = np.argmax(vitmax)
