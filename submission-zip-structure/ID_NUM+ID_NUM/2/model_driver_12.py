@@ -47,11 +47,12 @@ def _evaluate(tagger, test_set):
     segments = 0
     correct = 0
     failed_sentences = 0
+    num_of_sentences = len(test_set)
     
-    for sentence_idx in range(len(test_set)):
-        sentence   = test_set_input[sentence_idx]
-        prediction = predictions[sentence_idx]
-        gold       = list(map(lambda entry: entry[1], test_set[sentence_idx]))
+    for sentence_idx in range(num_of_sentences):
+        sentence        = test_set_input[sentence_idx]
+        prediction      = predictions[sentence_idx]
+        gold            = list(map(lambda entry: entry[1], test_set[sentence_idx]))
         
         segments += len(sentence)
                     
@@ -59,17 +60,27 @@ def _evaluate(tagger, test_set):
             failed_sentences += 1
         else:
             for pred in prediction:
+                correct_words = 0
                 for idx in range(len(sentence)):
                     segment = sentence[idx]
                     segment_prediction = pred[idx]
                     segment_gold       = gold[idx]
 
                     if segment_prediction == segment_gold:
-                        correct += 1
-                if correct == len(sentence):
-                    return 1
-    return 0
-    
+                        correct_words += 1
+                if correct_words == len(sentence):
+                    correct += 1
+                    break
+
+    token_accuracy = correct / num_of_sentences
+    print(f'sentences:        {num_of_sentences}')
+    print(f'failed sentences: {failed_sentences}')
+    print(f'token accuracy:   {token_accuracy:.4f}')
+
+    return token_accuracy
+
+
+
 
 def model_driver_12(tagger_class_under_test, annotated_sentences, passes=3, split=0.1):
 
