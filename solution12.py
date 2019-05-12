@@ -112,10 +112,10 @@ class Submission(SubmissionSpec12):
 
     def _create_vectors(self, sentences):
         #TODO: check if we can train on one ngram at a time or we need to multiply the ngrams
-        '''y = np.zeros(self._total_ngrams)
-        X = np.zeros(self._total_ngrams, dtype=list)'''
-        y = np.zeros(len(self._tri_grams))
-        X = [0] * len(self._tri_grams)
+        y = np.zeros(self._total_ngrams)
+        X = np.zeros(self._total_ngrams, dtype=list)
+        '''y = np.zeros(len(self._tri_grams))
+        X = [0] * len(self._tri_grams)'''
 
         #location in vect
         loc = 0
@@ -123,16 +123,16 @@ class Submission(SubmissionSpec12):
             fv = self._vectorize(gram)
             c  = self._tag_to_num[gram[1][1]]
 
-            '''y[loc:loc+times] = c
+            y[loc:loc+times] = c
 
             for t in range(times):
                 X[loc+t] = fv
 
-            loc += times'''
+            loc += times
 
-            y[loc] = c
+            '''y[loc] = c
             X[loc] = fv
-            loc += 1
+            loc += 1'''
 
         assert len(y) == len(X)
 
