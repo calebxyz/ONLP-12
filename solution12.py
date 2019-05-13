@@ -112,10 +112,11 @@ class Submission(SubmissionSpec12):
 
     def _create_vectors(self, sentences):
         #TODO: check if we can train on one ngram at a time or we need to multiply the ngrams
-        '''y = np.zeros(self._total_ngrams)
-        X = np.zeros(self._total_ngrams, dtype=list)'''
-        y = np.zeros(len(self._tri_grams))
-        X = [0] * len(self._tri_grams)
+        y = np.zeros(self._total_ngrams)
+        X = [[0]] * self._total_ngrams
+        #X = np.zeros((self._total_ngrams, self._fv_size))
+        '''y = np.zeros(len(self._tri_grams))
+        X = [0] * len(self._tri_grams)'''
 
         #location in vect
         loc = 0
@@ -123,16 +124,16 @@ class Submission(SubmissionSpec12):
             fv = self._vectorize(gram)
             c  = self._tag_to_num[gram[1][1]]
 
-            '''y[loc:loc+times] = c
+            y[loc:loc+times] = c
 
             for t in range(times):
                 X[loc+t] = fv
 
-            loc += times'''
+            loc += times
 
-            y[loc] = c
+            '''y[loc] = c
             X[loc] = fv
-            loc += 1
+            loc += 1'''
 
         assert len(y) == len(X)
 
@@ -208,10 +209,14 @@ class Submission(SubmissionSpec12):
         gram = [self.__START_GRAM, self.__START_GRAM, self.__END_GRAM]
 
         def assign_grams(gid, id):
-            if not states:
-                grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
-            else:
-                grm = (sentence[id], self._tag_set[states[gid]])
+            try:
+                if not states:
+                    grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
+                else:
+                    grm = (sentence[id], self._tag_set[states[gid]])
+            except:
+                grm = (None, None)
+
             gram[gid] = tuple(grm)
 
         assign_grams(1, idx)
@@ -253,19 +258,15 @@ class Submission(SubmissionSpec12):
         backpointer = np.full((N, T), -1)
         #init the lettece matrix
         for s in range(N):
-            pred = self._get_lrm_prediction(sentence, 0, [None, s, s+1])
+            pred = self._get_lrm_prediction(sentence, 0, [-1, s, s+1])
             viterbi_mat[s, 0] = pred[0][s]*self._pis[s]
 
         for t in range(1, T):
             for s_i in range(N):
                 pred = np.zeros((N,N))
                 for s_j in range(N):
-                    for s_k in range(N+1):
-                        if s_k < N:
-                            s_k_ = s_k
-                        else:
-                            s_k_ = None
-                        pred[s_j][s_k] = self._get_lrm_prediction(sentence, t, [s_i, s_j, s_k_])[0][s_j]
+                    for s_k in range(N):
+                        pred[s_j][s_k] = self._get_lrm_prediction(sentence, t, [s_i, s_j, s_k])[0][s_j]
                 pred = np.max(pred, 1)
                 vitmax = pred * viterbi_mat[:, t-1]
                 viterbi_mat[s_i, t] = np.max(vitmax)
@@ -275,10 +276,12 @@ class Submission(SubmissionSpec12):
         best_back_pointer = int(np.argmax(viterbi_mat[:, T - 1]))
 
         best_path = list()  # [self._tag_set[int(best_back_pointer)]]
-        best_path.append(self._tag_set[best_back_pointer])
+
         for t in reversed(range(0, T - 1)):
             next_tag = int(backpointer[np.argmax(viterbi_mat[:, t + 1]), t + 1])
             best_path.append(self._tag_set[next_tag])
+
+        best_path.append(self._tag_set[best_back_pointer])
 
         return best_path[::-1], best_path_probe
 
