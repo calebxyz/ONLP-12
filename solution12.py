@@ -112,10 +112,10 @@ class Submission(SubmissionSpec12):
 
     def _create_vectors(self, sentences):
         #TODO: check if we can train on one ngram at a time or we need to multiply the ngrams
-        y = np.zeros(self._total_ngrams)
-        X = np.zeros(self._total_ngrams, dtype=list)
-        '''y = np.zeros(len(self._tri_grams))
-        X = [0] * len(self._tri_grams)'''
+        '''y = np.zeros(self._total_ngrams)
+        X = np.zeros(self._total_ngrams, dtype=list)'''
+        y = np.zeros(len(self._tri_grams))
+        X = [0] * len(self._tri_grams)
 
         #location in vect
         loc = 0
@@ -123,16 +123,16 @@ class Submission(SubmissionSpec12):
             fv = self._vectorize(gram)
             c  = self._tag_to_num[gram[1][1]]
 
-            y[loc:loc+times] = c
+            '''y[loc:loc+times] = c
 
             for t in range(times):
                 X[loc+t] = fv
 
-            loc += times
+            loc += times'''
 
-            '''y[loc] = c
+            y[loc] = c
             X[loc] = fv
-            loc += 1'''
+            loc += 1
 
         assert len(y) == len(X)
 
@@ -211,7 +211,7 @@ class Submission(SubmissionSpec12):
             if not states:
                 grm = (sentence[id][self.__WORD_IDX], sentence[id][self.__TAG_IDX])
             else:
-                grm = (sentence[id], self._tag_set[gid])
+                grm = (sentence[id], self._tag_set[states[gid]])
             gram[gid] = tuple(grm)
 
         assign_grams(1, idx)
@@ -258,9 +258,15 @@ class Submission(SubmissionSpec12):
 
         for t in range(1, T):
             for s_i in range(N):
-                pred = np.zeros(N)
+                pred = np.zeros((N,N))
                 for s_j in range(N):
-                    pred[s_j] = self._get_lrm_prediction(sentence, t, [s_i, s_j, s_i+1])[0][s_j]
+                    for s_k in range(N+1):
+                        if s_k < N:
+                            s_k_ = s_k
+                        else:
+                            s_k_ = None
+                        pred[s_j][s_k] = self._get_lrm_prediction(sentence, t, [s_i, s_j, s_k_])[0][s_j]
+                pred = np.max(pred, 1)
                 vitmax = pred * viterbi_mat[:, t-1]
                 viterbi_mat[s_i, t] = np.max(vitmax)
                 backpointer[s_i, t] = np.argmax(vitmax)
