@@ -31,6 +31,8 @@ class Submission(SubmissionSpec12):
         self._ngrams = set()
         self._N = len(self._tag_set)
         self._pis = np.zeros(self._N, dtype=np.float64)
+        self._states_per = sorted(set(list(itertools.product(range(self._N), repeat=3))))
+        self._states_len = len(self._states_per)
 
     def _estimate_transition_probabilites(self, annotated_sentences):
         pass
@@ -249,6 +251,26 @@ class Submission(SubmissionSpec12):
         X = self._vectorize(gram).reshape(1, -1)
         return self._lrm.predict_proba(X)
 
+    def _get_bulk_lrm_prediction(self, sent, idx):
+        grams = list(map(self._create_trigram, itertools.repeat(sent, self._states_len),
+                         itertools.repeat(idx, self._states_len), self._states_per))
+        X = list(map(self._vectorize, grams))
+
+        return self._lrm.predict_proba(X)
+
+    def _prepare_prediction_data(self, raw_lrm_pred):
+        N = self._N
+        pred_i = np.zeros((N, N))
+        pred_j = np.zeros((N, N))
+        i_loc = 0
+        for i in range(0, self._states_len, N*N):
+            for j in range(N):
+                loc = i + j*N
+                pred_j[j, :] = raw_lrm_pred[loc:loc+N, j]
+            pred_i[i_loc, :] = np.max(pred_j, 1)[:]
+            i_loc += 1
+        return pred_i
+
     def _viterbi(self, sentence):
         if sentence is None:
             return
@@ -262,13 +284,10 @@ class Submission(SubmissionSpec12):
             viterbi_mat[s, 0] = pred[0][s]*self._pis[s]
 
         for t in range(1, T):
+            preds = self._get_bulk_lrm_prediction(sentence, t)
+            pred = self._prepare_prediction_data(preds)
             for s_i in range(N):
-                pred = np.zeros((N,N))
-                for s_j in range(N):
-                    for s_k in range(N):
-                        pred[s_j][s_k] = self._get_lrm_prediction(sentence, t, [s_i, s_j, s_k])[0][s_j]
-                pred = np.max(pred, 1)
-                vitmax = pred * viterbi_mat[:, t-1]
+                vitmax = pred[s_i, :] * viterbi_mat[:, t - 1]
                 viterbi_mat[s_i, t] = np.max(vitmax)
                 backpointer[s_i, t] = np.argmax(vitmax)
 
