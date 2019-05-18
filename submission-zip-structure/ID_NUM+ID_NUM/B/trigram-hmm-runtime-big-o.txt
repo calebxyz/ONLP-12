@@ -1,0 +1,18 @@
+Sequence with S length and L labels:
+
+Initialization step:
+Let T be the length of the sentence (in words) and U, V and K are the labels tag set of L.
+Creating matrix size O(Tª(UªV))
+Initialization start transitions cells and backpointers for the first cells. O(U ª V)
+Recursion:
+Iterate over all T words vs all )U,V) tags: O(Tª(UªV))
+	Set max probability for Viterbi[(U,V),t]	// loop over K previous states:  O(K)
+	Set backpointer for maxArg Viterbi[(U,V),t]:  //loop over K previous states:  O(K)
+Termination step:
+Set bestPathProb: O(UªV) //if using "STOP" word
+Set bestPathPointer: O(UªV) //if using "STOP" word
+Generating the bestPath sequence = O(T)
+
+TOTAL: O(Tª(UªV))+ O(U ª V)+ O(Tª(UªV))ª 2 ª O(K)+ 2 ª O(UªV)+ O(T) = O(Tª(UªVªK))= O(S ªL^3)
+
+

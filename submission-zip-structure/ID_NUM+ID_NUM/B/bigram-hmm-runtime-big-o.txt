@@ -1,0 +1,18 @@
+Sequence with S length and L labels:
+	For Bigrams: T = S, Q = L giving a total of O(TªL^2)
+
+Initialization step:
+Creating matrix size TªQ, were T is the length of the sentence (in words) and Q is the number of tags. O(TªQ)
+Initialization start transitions cells and backpointers for the first cells. O(Q)
+Recursion:
+Iterate over all words ª tags: O(TªQ)
+	Set max probability for Viterbi[s,t]:  O(Q)
+	Set backpointer for maxArg Viterbi[s,t]:  O(Q)
+
+Termination step:
+Set bestPathProb: O(Q)
+Set bestPathPointer: O(Q)
+Generating the bestPath sequence = O(T)
+
+TOTAL:
+ O(TªQ)+O(TªQ) x 2 x O(Q) + 2 x O(Q) + O(T) = O(TªQ^2) =O(SªL^2)

@@ -1,0 +1,7 @@
+3.
+In the BIGRAM Transition matrix we have 292 transitions (including "START") out of all the 306 possible,
+not much of a different from the worst case in which every transition is possible.
+292^2/306^2=85264/93636=9% difference
+
+So the worst case is relevant measure in the case of the transition matrix.
+
