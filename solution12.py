@@ -271,6 +271,17 @@ class Submission(SubmissionSpec12):
             i_loc += 1
         return pred_i
 
+    def _get_word_bulk_predictions(self, sent, idx):
+        return self._prepare_prediction_data(self._get_bulk_lrm_prediction(sent, idx))
+
+    def _get_sentence_bulk_prediction(self, sentence):
+        '''
+        creates a vector of bulk predictions ordered by words
+        :param sentence: the sentence to extract from
+        :return: returns a vector of prediction matrixes ([works, NxN transitions of (si, (sj,sk))])
+        '''
+        return np.array(list(map(self._get_word_bulk_predictions, itertools.repeat(sentence, len(sentence)), range(len(sentence)))))
+
     def _viterbi(self, sentence):
         if sentence is None:
             return
@@ -278,16 +289,23 @@ class Submission(SubmissionSpec12):
         T = len(sentence)
         viterbi_mat = np.zeros((N, T))
         backpointer = np.full((N, T), -1)
+
+        ''' get prediction for all words'''
+        preds = self._get_sentence_bulk_prediction(sentence)
+
         #init the lettece matrix
-        for s in range(N):
+        '''for s in range(N):
             pred = self._get_lrm_prediction(sentence, 0, [-1, s, s+1])
-            viterbi_mat[s, 0] = pred[0][s]*self._pis[s]
+            viterbi_mat[s, 0] = pred[0][s]*self._pis[s]'''
+
+        '''init first values in the viterbi matrix , the predictions are allocated by words in the sentence 
+        so we need to look at the first matrix take the maximum value to the transition s_i,s_j,s_k which is simplified 
+        after the transition to s_i,(s_j,s_k) and multiply it by pis set vector'''
+        viterbi_mat[:, 0] = np.max(preds[0], 0)*self._pis
 
         for t in range(1, T):
-            preds = self._get_bulk_lrm_prediction(sentence, t)
-            pred = self._prepare_prediction_data(preds)
             for s_i in range(N):
-                vitmax = pred[s_i, :] * viterbi_mat[:, t - 1]
+                vitmax = preds[t][s_i, :] * viterbi_mat[:, t - 1]
                 viterbi_mat[s_i, t] = np.max(vitmax)
                 backpointer[s_i, t] = np.argmax(vitmax)
 
