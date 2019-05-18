@@ -126,7 +126,7 @@ def model_driver_12(tagger_class_under_test, annotated_sentences, passes=3, spli
         we want to cut the size of the data to train and predict on due to the  calculation time and memory 
         we will take 10000 sentences to the data set , and will take 1/3 of the test set 
         '''
-        dataset_size = 1000#10000
+        dataset_size = 10000
         split_index  = int((dataset_size*split)/3)
         test_set     = shuffled[:split_index]
         
